@@ -13,22 +13,23 @@ window.title("E-Fridge")
 window.attributes('-topmost', True)  
 
 def find_info_from_gtin(gtin):
-    """"Will eventually find product information based on the gtin number. For now, it just returns the gtin."""
-    return gtin
+    """"Finds product information based on the gtin number."""
+    response = requests.get(f"https://world.openfoodfacts.net/api/v2/product/{gtin}?fields=product_name,brands,ingredients_text,expiration_date,front")
+    if response.status_code == 200:
+        return response.json()
+    else:
+        messagebox.showerror("Error", f"Failed to fetch product information for GTIN {gtin}. Status code: {response.status_code}")
+        return 
 
 def scan_barcode(image_path):
-    """"Returns the barcode format and code from the image at the given path."""
+    """"Returns the GTIN from the image at the given path."""
     img = cv2.imread(image_path)
     results = zxingcpp.read_barcode(img)
-    pprint(results.text)
-    output = {
-            "format": results.format,
-            "code": results.text
-        }
-    return output if output else None
+    if results:
+        return results.text
 
 def on_drop(event):
-    """"Handles the dr op event from drag and dropping files onto the listbox."""
+    """"Handles the drop event from drag and dropping files onto the listbox."""
     try:
         files = window.tk.splitlist(event.data)
         valid_files = []
@@ -42,7 +43,15 @@ def on_drop(event):
         if valid_files:
             with open("dropped_files.json", "w") as f:
                 json.dump(valid_files, f)
-            messagebox.showinfo("Success", find_info_from_gtin(scan_barcode(valid_files[0])["code"]))
+            for file in valid_files:
+                code = scan_barcode(file)
+                if not code:
+                    messagebox.showerror("Error", (len(valid_files) > 1 and "["+str(valid_files.index(file)+1)+"] " or "") + "No barcode found in the image.")
+                    continue
+                info = find_info_from_gtin(code)
+                if info:
+                    pprint(info)
+                    messagebox.showinfo("Success", info["product"]["product_name"] + " has been found and added to your fridge!")
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred: {e}")
  
